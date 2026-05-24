@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-config
+  namespace: llm-inference
+data:
+  LLM_ENVIRONMENT: "local"
+  LLM_BACKEND_KIND: "mock"
+  LLM_BACKEND_URL: "http://llm-backend:8000"
+  LLM_DEFAULT_MODEL: "resume-llm"
+  LLM_MAX_PROMPT_CHARS: "16000"
