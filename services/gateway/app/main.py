@@ -14,6 +14,7 @@ from .telemetry import configure_telemetry
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Initialize shared settings and the inference backend for the app lifecycle."""
     settings = get_settings()
     app.state.settings = settings
     app.state.backend = build_backend(settings)
@@ -31,6 +32,7 @@ configure_telemetry(app, get_settings())
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
+    """Attach a request ID to every response so logs, traces, and clients can correlate work."""
     request_id = request.headers.get("x-request-id", f"req-{time.time_ns()}")
     response = await call_next(request)
     response.headers["x-request-id"] = request_id
@@ -39,11 +41,13 @@ async def add_request_id(request: Request, call_next):
 
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
+    """Report whether the gateway process is alive."""
     return {"status": "ok"}
 
 
 @app.get("/readyz")
 async def readyz(request: Request) -> dict[str, str]:
+    """Report whether the gateway is ready to receive inference traffic."""
     settings = request.app.state.settings
     if settings.backend_kind == "mock":
         return {"status": "ready", "backend": "mock"}
@@ -57,6 +61,7 @@ async def readyz(request: Request) -> dict[str, str]:
 
 @app.get("/metrics")
 async def metrics() -> Response:
+    """Expose Prometheus metrics for scraping."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
@@ -65,6 +70,7 @@ async def chat_completions(
     request_body: ChatCompletionRequest,
     request: Request,
 ) -> ChatCompletionResponse:
+    """Validate and execute an OpenAI-compatible chat completion request."""
     settings = request.app.state.settings
     model = request_body.model or settings.default_model
     prompt_chars = sum(len(message.content) for message in request_body.messages)
