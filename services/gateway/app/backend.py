@@ -82,8 +82,56 @@ class OpenAICompatibleBackend(InferenceBackend):
         return ChatCompletionResponse.model_validate(response.json())
 
 
+class OllamaBackend(InferenceBackend):
+    def __init__(self, settings: Settings) -> None:
+        """Store Ollama connection settings for local model inference."""
+        self.settings = settings
+
+    async def complete(self, request: ChatCompletionRequest, model: str) -> ChatCompletionResponse:
+        """Forward the chat completion request to an Ollama model server."""
+        payload = {
+            "model": model,
+            "messages": [message.model_dump() for message in request.messages],
+            "stream": False,
+            "options": {
+                "temperature": request.temperature,
+                "num_predict": request.max_tokens,
+            },
+        }
+        async with httpx.AsyncClient(timeout=self.settings.backend_timeout_seconds) as client:
+            response = await client.post(
+                f"{self.settings.backend_url.rstrip('/')}/api/chat",
+                json=payload,
+            )
+            response.raise_for_status()
+
+        body = response.json()
+        content = body.get("message", {}).get("content", "")
+        prompt_tokens = body.get("prompt_eval_count") or estimate_prompt_tokens(request)
+        completion_tokens = body.get("eval_count") or estimate_tokens(content)
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex}",
+            created=int(time.time()),
+            model=model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=content),
+                    finish_reason="stop" if body.get("done", True) else "length",
+                )
+            ],
+            usage=TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            ),
+        )
+
+
 def build_backend(settings: Settings) -> InferenceBackend:
     """Create the configured inference backend implementation."""
     if settings.backend_kind == "openai_compatible":
         return OpenAICompatibleBackend(settings)
+    if settings.backend_kind == "ollama":
+        return OllamaBackend(settings)
     return MockBackend()

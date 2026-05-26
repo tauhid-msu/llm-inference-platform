@@ -2,7 +2,7 @@
 
 This is a hands-on learning project for exploring the infrastructure patterns behind production LLM serving. It implements an OpenAI-compatible inference gateway, Kubernetes deployment assets, and an observability stack to practice the kind of systems work used in ML infrastructure teams.
 
-The goal is to connect application engineering, model-serving operations, and platform reliability in one small but realistic codebase. The service runs locally with a mock backend, while the deployment shape is designed so a real vLLM or TGI-style model server can be plugged in later.
+The goal is to connect application engineering, model-serving operations, and platform reliability in one small but realistic codebase. The service can run against a local Ollama model for real inference, a mock backend for tests, or an OpenAI-compatible vLLM/TGI-style backend for Kubernetes deployments.
 
 ## Learning Goals
 
@@ -15,7 +15,7 @@ The goal is to connect application engineering, model-serving operations, and pl
 ## What It Includes
 
 - OpenAI-compatible `/v1/chat/completions` inference gateway
-- Backend adapter pattern for mock, vLLM, or TGI-style HTTP model servers
+- Backend adapter pattern for Ollama, mock, vLLM, or TGI-style HTTP model servers
 - Prometheus metrics for latency, request volume, token volume, and backend errors
 - OpenTelemetry trace export with request correlation IDs
 - Kubernetes deployment with probes, resource requests, HPA, PDB, NetworkPolicy, and Kustomize overlays
@@ -28,7 +28,7 @@ The goal is to connect application engineering, model-serving operations, and pl
 ```mermaid
 flowchart LR
     C["Clients / Apps"] --> G["Inference Gateway\nFastAPI"]
-    G -->|HTTP| M["LLM Backend\nvLLM / TGI / mock"]
+    G -->|HTTP| M["LLM Backend\nOllama / vLLM / TGI / mock"]
     G --> P["Prometheus Metrics"]
     G --> O["OpenTelemetry Collector"]
     P --> A["Alerts"]
@@ -50,8 +50,36 @@ Send a request:
 ```bash
 curl -s http://127.0.0.1:8080/v1/chat/completions \
   -H 'content-type: application/json' \
-  -d '{"model":"learning-llm","messages":[{"role":"user","content":"Explain GPU batching in one sentence."}]}'
+  -d '{"model":"llama3.2","messages":[{"role":"user","content":"Explain GPU batching in one sentence."}]}'
 ```
+
+## Real Local LLM Backend
+
+For local real-model inference, run Ollama and pull a small model:
+
+```bash
+ollama pull llama3.2
+```
+
+Start the gateway with the Ollama backend:
+
+```bash
+LLM_BACKEND_KIND=ollama \
+LLM_BACKEND_URL=http://127.0.0.1:11434 \
+LLM_DEFAULT_MODEL=llama3.2 \
+uvicorn app.main:app --app-dir services/gateway --host 127.0.0.1 --port 8080
+```
+
+Then call the same OpenAI-compatible gateway endpoint:
+
+```bash
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"llama3.2","messages":[{"role":"user","content":"Give one reason observability matters for LLM serving."}]}' \
+  | python3 -m json.tool
+```
+
+For deterministic local tests without a model server, leave `LLM_BACKEND_KIND` unset or set it to `mock`.
 
 Run the smoke test:
 
