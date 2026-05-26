@@ -10,6 +10,7 @@ from .config import Settings
 
 
 def configure_telemetry(app, settings: Settings) -> None:
+    """Configure FastAPI and HTTPX tracing with optional OTLP span export."""
     resource = Resource.create(
         {
             "service.name": settings.service_name,

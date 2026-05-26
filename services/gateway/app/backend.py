@@ -17,19 +17,23 @@ from .schemas import (
 class InferenceBackend(ABC):
     @abstractmethod
     async def complete(self, request: ChatCompletionRequest, model: str) -> ChatCompletionResponse:
+        """Return a chat completion response for the requested model."""
         raise NotImplementedError
 
 
 def estimate_tokens(text: str) -> int:
+    """Estimate token count with a lightweight whitespace-based approximation."""
     return max(1, len(text.split()))
 
 
 def estimate_prompt_tokens(request: ChatCompletionRequest) -> int:
+    """Estimate total prompt tokens across all messages in a chat request."""
     return sum(estimate_tokens(message.content) for message in request.messages)
 
 
 class MockBackend(InferenceBackend):
     async def complete(self, request: ChatCompletionRequest, model: str) -> ChatCompletionResponse:
+        """Generate a deterministic local response without calling an external model server."""
         prompt_tokens = estimate_prompt_tokens(request)
         last_user = next(
             (message.content for message in reversed(request.messages) if message.role == "user"),
@@ -62,9 +66,11 @@ class MockBackend(InferenceBackend):
 
 class OpenAICompatibleBackend(InferenceBackend):
     def __init__(self, settings: Settings) -> None:
+        """Store backend connection settings for later inference calls."""
         self.settings = settings
 
     async def complete(self, request: ChatCompletionRequest, model: str) -> ChatCompletionResponse:
+        """Forward the chat completion request to an OpenAI-compatible backend."""
         payload = request.model_dump()
         payload["model"] = model
         async with httpx.AsyncClient(timeout=self.settings.backend_timeout_seconds) as client:
@@ -77,6 +83,7 @@ class OpenAICompatibleBackend(InferenceBackend):
 
 
 def build_backend(settings: Settings) -> InferenceBackend:
+    """Create the configured inference backend implementation."""
     if settings.backend_kind == "openai_compatible":
         return OpenAICompatibleBackend(settings)
     return MockBackend()

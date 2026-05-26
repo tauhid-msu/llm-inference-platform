@@ -19,4 +19,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Load and cache application settings from environment variables."""
     return Settings()
